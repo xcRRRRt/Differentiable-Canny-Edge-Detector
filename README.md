@@ -2,11 +2,14 @@
 # Differentiable Canny Edge Detector
 
 ### Example:  
-<img src="Lena.png" title="Lena" width="300px" alt=""/>
-<img src="edge.png" title="edge" width="300px" alt=""/>
 
+<p align="center">
+  <img src="Lena.png" width="49%"  alt=""/>
+  <img src="edge.png" width="49%"  alt=""/>
+</p>
 
 ### Usage:  
+
 ```python
 import torch
 from PIL import Image
