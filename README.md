@@ -2,8 +2,8 @@
 # Differentiable Canny Edge Detector
 
 ### Example:  
-<img src="Lena.png" title="Lena" width="384" alt=""/>
-<img src="edge.png" title="edge" width="384" alt=""/>
+<img src="Lena.png" title="Lena" width="300" alt=""/>
+<img src="edge.png" title="edge" width="300" alt=""/>
 
 
 ### Usage:  
