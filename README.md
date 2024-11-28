@@ -4,9 +4,17 @@
 
 ### Example:
 
-<img src="Lena.png" alt="" width="49%">
-<img src="edge.png" alt="" width="49%">
-<img src="binary_edge.png" alt="" width="98%">
+**Original:**
+
+<img src="Lena.png" alt="">
+
+**Differentiable:**
+
+<img src="edge.png" alt="">
+
+**Binary:**
+
+<img src="binary_edge.png" alt="">
 
 ### Usage:
 
