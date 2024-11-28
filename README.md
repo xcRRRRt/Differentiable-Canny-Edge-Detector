@@ -4,25 +4,9 @@
 
 ### Example:
 
-<div style="width: 98%; margin: auto;">
-    <!-- 前两张图片并排 -->
-    <div style="display: flex; width: 100%; justify-content: center;">
-        <div style="width: 50%; text-align: center;">
-            <b>Original</b>
-            <img src="Lena.png" alt="Lena" style="width: 100%; height: auto;">
-        </div>
-        <div style="width: 50%; text-align: center;">
-            <b>Differentiable</b>
-            <img src="edge.png" alt="Edge" style="width: 100%; height: auto;">
-        </div>
-    </div>
-    <div style="width: 100%; text-align: center; margin-top: -6px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-        <img src="binary_edge.png" alt="Binary Edge" style="width: 100%; height: auto;">
-        <b>Binary</b>
-    </div>
-</div>
-
-
+<img src="Lena.png" alt="" width="49%">
+<img src="edge.png" alt="" width="49%">
+<img src="binary_edge.png" alt="" width="98%">
 
 ### Usage:
 
