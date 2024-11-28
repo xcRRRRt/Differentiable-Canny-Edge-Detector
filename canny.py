@@ -66,6 +66,7 @@ class CannyEdgeDetector(nn.Module):
             gaussian_sigma: float,
             high_threshold: float,
             low_threshold: float,
+            binary: bool = False
     ):
         """
         Canny边缘检测
@@ -73,6 +74,7 @@ class CannyEdgeDetector(nn.Module):
         :param gaussian_sigma: 高斯分布的标准差
         :param high_threshold: 强阈值
         :param low_threshold: 弱阈值
+        :param binary: 是否二值化，二值化后不可导
 
         Example::
 
@@ -88,27 +90,28 @@ class CannyEdgeDetector(nn.Module):
             >>> canny = CannyEdgeDetector(5, 1, 0.1, 0.25)
             >>> edge = canny(img)
             image None
-            img <ReflectionPad2DBackward0 object at 0x000001A60B8E3D00>
-            out <ConvolutionBackward0 object at 0x000001A60B8E3D00>
-            image <ConvolutionBackward0 object at 0x000001A60B8E3FA0>
-            padded_img <ReflectionPad2DBackward0 object at 0x000001A60B8E3FA0>
-            grad_x <ConvolutionBackward0 object at 0x000001A60B8E3FA0>
-            grad_y <ConvolutionBackward0 object at 0x000001A60B8E3FA0>
-            grad <SqrtBackward0 object at 0x000001A60B8E3FA0>
-            grad_direction <WhereBackward0 object at 0x000001A60B8E3FA0>
-            grad <SqrtBackward0 object at 0x000001A60B8E3FA0>
-            grad_direction <WhereBackward0 object at 0x000001A60B8E3FA0>
-            padded_grad <ReflectionPad2DBackward0 object at 0x000001A60B8E3FA0>
-            suppressed_grad <WhereBackward0 object at 0x000001A60B8E3FA0>
-            edges <WhereBackward0 object at 0x000001A60B8E3FA0>
-            max_value <MaxBackward1 object at 0x000001A60B8E3FA0>
-            min_value <MinBackward1 object at 0x000001A60B8E3FA0>
-            low_threshold <AddBackward0 object at 0x000001A60B8E3FA0>
-            high_threshold <AddBackward0 object at 0x000001A60B8E3FA0>
-            strong_mask <SigmoidBackward0 object at 0x000001A60B8E3FA0>
-            weak_mask <MulBackward0 object at 0x000001A60B8E3FA0>
-            has_strong_neighbor <ConvolutionBackward0 object at 0x000001A60B8E3FA0>
-            mask <AddBackward0 object at 0x000001A60B8E3FA0>
+            img <ReflectionPad2DBackward0 object at 0x00000244EE7EFF70>
+            out <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+            image <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+            padded_img <ReflectionPad2DBackward0 object at 0x00000244EE7EFF70>
+            grad_x <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+            grad_y <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+            grad <SqrtBackward0 object at 0x00000244EE7EFF70>
+            grad_direction <WhereBackward0 object at 0x00000244EE7EFF70>
+            grad <SqrtBackward0 object at 0x00000244EE7EFF70>
+            grad_direction <WhereBackward0 object at 0x00000244EE7EFF70>
+            padded_grad <ReflectionPad2DBackward0 object at 0x00000244EE7EFF70>
+            suppressed_grad <WhereBackward0 object at 0x00000244EE7EFF70>
+            edges <WhereBackward0 object at 0x00000244EE7EFF70>
+            max_value <MaxBackward1 object at 0x00000244EE7EFF70>
+            min_value <MinBackward1 object at 0x00000244EE7EFF70>
+            low_threshold <AddBackward0 object at 0x00000244EE7EFF70>
+            high_threshold <AddBackward0 object at 0x00000244EE7EFF70>
+            strong_mask None
+            weak_mask None
+            has_strong_neighbor None
+            mask None
+            filtered_edges <MulBackward0 object at 0x00000244EE7EFF70>
             >>> save_image(edge, 'edge.png')
         """
         super(CannyEdgeDetector, self).__init__()
@@ -120,6 +123,7 @@ class CannyEdgeDetector(nn.Module):
         self.gaussian_kernel_size = gaussian_kernel_size
         self.high_threshold = high_threshold
         self.low_threshold = low_threshold
+        self.binary = binary
         self.register_buffer('gaussian_kernel', gaussian_kernel(gaussian_kernel_size, gaussian_sigma))
         self.register_buffer('sobel_kernel_x', sobel_kernel()[0])
         self.register_buffer('sobel_kernel_y', sobel_kernel()[1])
@@ -200,15 +204,74 @@ class CannyEdgeDetector(nn.Module):
         low_threshold = min_value + (max_value - min_value) * self.low_threshold
         high_threshold = min_value + (max_value - min_value) * self.high_threshold
 
-        # 使用平滑函数替代二值化操作
-        # *100后更接近硬二值化
-        strong_mask = torch.sigmoid(100 * (edges - high_threshold))  # 强边缘
-        weak_mask = torch.sigmoid(100 * (edges - low_threshold)) * (1 - strong_mask)  # 弱边缘
+        strong_mask = torch.where(edges >= high_threshold, torch.ones_like(edges), torch.zeros_like(edges))
+        weak_mask = torch.where(torch.logical_and(edges >= low_threshold, edges < high_threshold), torch.ones_like(edges), torch.zeros_like(edges))
 
-        # 统计每个像素在其邻域内是否存在强边缘,如果邻域内有强边缘像素,则该值较大,否则,该值较小
         has_strong_neighbor = f.conv2d(f.pad(strong_mask, pad=(1, 1, 1, 1), mode='reflect'), self.hysteresis_kernel)
 
-        # 最终的平滑边缘掩码
-        mask = strong_mask + (weak_mask * torch.sigmoid(100 * (has_strong_neighbor - 0.5)))
+        mask = torch.where(torch.logical_or(strong_mask, torch.logical_and(weak_mask, has_strong_neighbor)), torch.ones_like(strong_mask), torch.zeros_like(strong_mask))
+
+        filtered_edges = edges * mask.detach()
+
         _watch_grad_fn(locals())
-        return mask
+        return filtered_edges
+
+
+def canny_edge_detector(
+        img: torch.Tensor,
+        gaussian_kernel_size: int,
+        gaussian_sigma: float,
+        high_threshold: float,
+        low_threshold: float,
+):
+    """
+    Canny边缘检测
+    :param img: 图片, dim=4
+    :param gaussian_kernel_size: 高斯平滑卷积核大小
+    :param gaussian_sigma: 高斯分布的标准差
+    :param high_threshold: 强阈值
+    :param low_threshold: 弱阈值
+
+    Example::
+
+        >>> import torch
+        >>> import torch.nn.functional as f
+        >>> from PIL import Image
+        >>> from torchvision.utils import save_image
+        >>> from torchvision.transforms.functional import to_tensor
+        >>> from canny import canny_edge_detector
+        >>> path =  'Lena.png'
+        >>> img = Image.open(path).convert('L')
+        >>> img = to_tensor(img).unsqueeze(0)
+        >>> edge = canny_edge_detector(img, 5, 1, 0.1, 0.25)
+        image None
+        img <ReflectionPad2DBackward0 object at 0x00000244EE7EFF70>
+        out <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+        image <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+        padded_img <ReflectionPad2DBackward0 object at 0x00000244EE7EFF70>
+        grad_x <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+        grad_y <ConvolutionBackward0 object at 0x00000244EE7EFF70>
+        grad <SqrtBackward0 object at 0x00000244EE7EFF70>
+        grad_direction <WhereBackward0 object at 0x00000244EE7EFF70>
+        grad <SqrtBackward0 object at 0x00000244EE7EFF70>
+        grad_direction <WhereBackward0 object at 0x00000244EE7EFF70>
+        padded_grad <ReflectionPad2DBackward0 object at 0x00000244EE7EFF70>
+        suppressed_grad <WhereBackward0 object at 0x00000244EE7EFF70>
+        edges <WhereBackward0 object at 0x00000244EE7EFF70>
+        max_value <MaxBackward1 object at 0x00000244EE7EFF70>
+        min_value <MinBackward1 object at 0x00000244EE7EFF70>
+        low_threshold <AddBackward0 object at 0x00000244EE7EFF70>
+        high_threshold <AddBackward0 object at 0x00000244EE7EFF70>
+        strong_mask None
+        weak_mask None
+        has_strong_neighbor None
+        mask None
+        filtered_edges <MulBackward0 object at 0x00000244EE7EFF70>
+        >>> save_image(edge, 'edge.png')
+    """
+    canny = CannyEdgeDetector(gaussian_kernel_size, gaussian_sigma, high_threshold, low_threshold).to(img.device)
+    return canny(img)
+
+
+def binaryzation_edge(edges: torch.Tensor) -> torch.Tensor:
+    return torch.sign(edges).abs()
