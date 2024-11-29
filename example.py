@@ -17,7 +17,7 @@ from canny import CannyEdgeDetector, canny_edge_detector, binaryzation_edge
 def main():
     path = r"Lena.png"
     img = Image.open(path).convert('L')
-    img = to_tensor(img).unsqueeze(0).to('cpu')
+    img = to_tensor(img).unsqueeze(0).to('cuda')
     img.requires_grad = True
     # canny = CannyEdgeDetector(5, 1, 0.15, 0.3).to('cuda')
     # edges: torch.Tensor = canny(img)

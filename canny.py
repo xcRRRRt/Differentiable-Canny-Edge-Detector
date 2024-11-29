@@ -132,31 +132,53 @@ class CannyEdgeDetector(nn.Module):
     def forward(self, image):
         smoothed_image = self.gaussian_smoothing(image)
         grad, grad_direction = self.gradient_calculation(smoothed_image)
-        edges = self.non_maximum_suppression(grad, grad_direction)
-        edges = self.double_threshold(edges)
+        thin_edges = self.non_maximum_suppression(grad, grad_direction)
+        edges = self.double_threshold(thin_edges)
         return edges
 
     def gaussian_smoothing(self, image):
         """高斯平滑"""
         img = f.pad(image, pad=tuple([self.gaussian_kernel_size // 2] * 4), mode='reflect')
         out = f.conv2d(img, self.gaussian_kernel)
-        _watch_grad_fn(locals())
+        # _watch_grad_fn(locals())
         return out
 
-    def gradient_calculation(self, image):
+    def gradient_calculation(self, image, epsilon=1e-8):
         """计算梯度和梯度方向"""
-        padded_img = f.pad(image, pad=(1, 1, 1, 1), mode='reflect')  # 填充，保证图片大小相同
+        # 这里绝对不能使用reflect padding, 如果要使用，计算grad时添加一个小常数, grad = sqrt(grad_x^2 + grad_y^2 + epsilon)  # 或者使用torch.clamp应该也行
+        # 假设图片的右下角为
+        # 0.23 0.33
+        # 0.10 0.68
+        # 经过reflect padding得到
+        # 0.23 0.33 0.23
+        # 0.10 0.68 0.10
+        # 0.23 0.33 0.23
+        # 乘上 sobel x 卷积核 和 sobel y 卷积核
+        #     -1 0 1           1 2 1
+        #     -2 0 2           0 0 0
+        #     -1 0 1           1 -2 -1
+        # 分别得到 grad_x 和 grad_y 的值刚好是0
+        # 而 grad = sqrt(grad_x^2 + grad_y^2)
+        # 相当于是 f(x) = x^0.5
+        # 现在对f(x)求导:  f‘(x) = 1 / (2 * x^0.5)
+        # 现在 (grad_x^2 + grad_y^2) = x = 0, 代入f'(x)中
+        # 发现导数刚好求不出来，是一个nan值
+        # now可以简化一下结论
+        # 如果grad是0，那么梯度中一定会出现nan值
+        # 于是现在的问题变成了 => 如果图片中一个区域的值全部相同，经过sobel核卷积，得到的grad值会是0, 求梯度的时候会得到nan
+        # 恐怕只能加上一个小常数epsilon来保证grad不为0了
+        padded_img = f.pad(image, pad=(1, 1, 1, 1), mode='reflect')  # 填充，保证卷积后图片大小相同
 
         grad_x = f.conv2d(padded_img, self.sobel_kernel_x)
         grad_y = f.conv2d(padded_img, self.sobel_kernel_y)
 
         # 计算梯度
-        grad = torch.sqrt(grad_x ** 2 + grad_y ** 2)
+        grad = torch.sqrt(grad_x ** 2 + grad_y ** 2 + epsilon)
         # 计算梯度方向
         grad_direction = torch.atan2(grad_y, grad_x)
         grad_direction = torch.rad2deg(grad_direction)
         grad_direction = torch.where(grad_direction < 0, grad_direction + 180, grad_direction)
-        _watch_grad_fn(locals())
+        # _watch_grad_fn(locals())
         return grad, grad_direction
 
     def non_maximum_suppression(self, grad, grad_direction):
@@ -194,7 +216,7 @@ class CannyEdgeDetector(nn.Module):
             grad,
             suppressed_grad
         )
-        _watch_grad_fn(locals())
+        # _watch_grad_fn(locals())
         return suppressed_grad
 
     def double_threshold(self, edges):
@@ -213,7 +235,7 @@ class CannyEdgeDetector(nn.Module):
 
         filtered_edges = edges * mask.detach()
 
-        _watch_grad_fn(locals())
+        # _watch_grad_fn(locals())
         return filtered_edges
 
 
